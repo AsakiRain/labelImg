@@ -518,7 +518,9 @@ class Canvas(QWidget):
         Shape.label_font_size = self.label_font_size
         for shape in self.shapes:
             if (shape.selected or not self._hide_background) and self.isVisible(shape):
-                shape.fill = shape.selected or shape == self.h_shape
+                # Do not draw the semi-transparent fill/background when hovering
+                # over or selecting a target box; keep only the box outline/vertices.
+                shape.fill = False
                 shape.paint(p)
         if self.current:
             self.current.paint(p)
