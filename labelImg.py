@@ -1639,6 +1639,17 @@ class MainWindow(QMainWindow, WindowMixin):
         t_yolo_parse_reader = YoloReader(txt_path, self.image)
         shapes = t_yolo_parse_reader.get_shapes()
         print(shapes)
+
+        # In YOLO mode, the classes.txt beside the annotation file defines the
+        # dataset class order. Keep the UI/default label list in sync with it so
+        # later saves do not fall back to data/predefined_classes.txt.
+        self.label_hist = list(t_yolo_parse_reader.classes)
+        self.label_dialog = LabelDialog(parent=self, list_item=self.label_hist)
+        self.default_label_combo_box.cb.clear()
+        self.default_label_combo_box.cb.addItems(self.label_hist)
+        if self.label_hist:
+            self.default_label = self.label_hist[0]
+
         self.load_labels(shapes)
         self.canvas.verified = t_yolo_parse_reader.verified
 

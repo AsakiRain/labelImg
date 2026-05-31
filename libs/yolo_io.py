@@ -25,7 +25,10 @@ class YOLOWriter:
         bnd_box['difficult'] = difficult
         self.box_list.append(bnd_box)
 
-    def bnd_box_to_yolo_line(self, box, class_list=[]):
+    def bnd_box_to_yolo_line(self, box, class_list=None):
+        if class_list is None:
+            class_list = []
+
         x_min = box['xmin']
         x_max = box['xmax']
         y_min = box['ymin']
@@ -46,22 +49,34 @@ class YOLOWriter:
 
         return class_index, x_center, y_center, w, h
 
-    def save(self, class_list=[], target_file=None):
+    def save(self, class_list=None, target_file=None):
+
+        if class_list is None:
+            class_list = []
+        else:
+            # Do not mutate MainWindow.label_hist or any caller-owned list.
+            class_list = list(class_list)
 
         out_file = None  # Update yolo .txt
         out_class_file = None   # Update class list .txt
 
         if target_file is None:
-            out_file = open(
-            self.filename + TXT_EXT, 'w', encoding=ENCODE_METHOD)
-            classes_file = os.path.join(os.path.dirname(os.path.abspath(self.filename)), "classes.txt")
-            out_class_file = open(classes_file, 'w')
+            target_file = self.filename + TXT_EXT
 
-        else:
-            out_file = codecs.open(target_file, 'w', encoding=ENCODE_METHOD)
-            classes_file = os.path.join(os.path.dirname(os.path.abspath(target_file)), "classes.txt")
-            out_class_file = open(classes_file, 'w')
+        classes_file = os.path.join(os.path.dirname(os.path.abspath(target_file)), "classes.txt")
 
+        # If the annotation directory already has a classes.txt, it is the
+        # authoritative YOLO class order. Prefer it over the global/default
+        # predefined class list, otherwise saving can overwrite a dataset's
+        # classes.txt with data/predefined_classes.txt (dog/person/cat/...).
+        if os.path.isfile(classes_file):
+            with codecs.open(classes_file, 'r', encoding=ENCODE_METHOD) as f:
+                existing_class_list = [line.strip() for line in f if line.strip()]
+            if existing_class_list:
+                class_list = existing_class_list
+
+        out_file = codecs.open(target_file, 'w', encoding=ENCODE_METHOD)
+        out_class_file = codecs.open(classes_file, 'w', encoding=ENCODE_METHOD)
 
         for box in self.box_list:
             class_index, x_center, y_center, w, h = self.bnd_box_to_yolo_line(box, class_list)
