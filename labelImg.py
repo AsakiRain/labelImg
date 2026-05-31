@@ -1113,6 +1113,9 @@ class MainWindow(QMainWindow, WindowMixin):
                 self.file_list_widget.clear()
                 self.m_img_list.clear()
 
+        if unicode_file_path and not os.path.exists(unicode_file_path):
+            return self.load_missing_image_placeholder(unicode_file_path)
+
         if unicode_file_path and os.path.exists(unicode_file_path):
             if LabelFile.is_label_file(unicode_file_path):
                 try:
@@ -1170,6 +1173,34 @@ class MainWindow(QMainWindow, WindowMixin):
             self.canvas.setFocus(True)
             return True
         return False
+
+    def load_missing_image_placeholder(self, file_path):
+        """Show a blank placeholder for a missing image while preserving navigation state."""
+        width = self.image.width() if not self.image.isNull() else 800
+        height = self.image.height() if not self.image.isNull() else 600
+        image = QImage(width, height, QImage.Format_RGB32)
+        image.fill(Qt.white)
+
+        self.image_data = image
+        self.label_file = None
+        self.canvas.verified = False
+        self.image = image
+        self.file_path = file_path
+        self.canvas.load_pixmap(QPixmap.fromImage(image))
+        self.set_clean()
+        self.canvas.setEnabled(False)
+        self.adjust_scale(initial=True)
+        self.paint_canvas()
+        self.toggle_actions(True)
+        self.actions.create.setEnabled(False)
+        self.actions.save.setEnabled(False)
+        self.actions.saveAs.setEnabled(False)
+
+        counter = self.counter_str()
+        self.status("Missing image: %s" % file_path)
+        self.setWindowTitle(__appname__ + ' ' + file_path + ' ' + counter + ' [missing]')
+        self.canvas.setFocus(True)
+        return True
 
     def counter_str(self):
         """
