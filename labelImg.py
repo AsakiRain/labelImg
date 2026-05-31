@@ -1181,6 +1181,16 @@ class MainWindow(QMainWindow, WindowMixin):
         image = QImage(width, height, QImage.Format_RGB32)
         image.fill(Qt.white)
 
+        painter = QPainter(image)
+        painter.setPen(QColor(80, 80, 80))
+        font = painter.font()
+        font.setBold(True)
+        font.setPointSize(max(18, min(width, height) // 20))
+        painter.setFont(font)
+        painter.drawText(image.rect(), Qt.AlignCenter,
+                         "MISSING\nIMAGE\nUse Previous or Next to continue.")
+        painter.end()
+
         self.image_data = image
         self.label_file = None
         self.canvas.verified = False
