@@ -73,7 +73,8 @@ class WindowMixin(object):
 class MainWindow(QMainWindow, WindowMixin):
     FIT_WINDOW, FIT_WIDTH, MANUAL_ZOOM = list(range(3))
 
-    def __init__(self, default_filename=None, default_prefdef_class_file=None, default_save_dir=None):
+    def __init__(self, default_filename=None, default_prefdef_class_file=None,
+                 default_save_dir=None, yolo_class_file=None):
         super(MainWindow, self).__init__()
         self.setWindowTitle(__appname__)
 
@@ -90,6 +91,21 @@ class MainWindow(QMainWindow, WindowMixin):
 
         # Save as Pascal voc xml
         self.default_save_dir = default_save_dir
+        # Keep the configured class list available when reading YOLO labels.
+        self.class_file = default_prefdef_class_file
+        # When the user explicitly supplies a class file, YOLO saves should
+        # reuse it instead of creating classes.txt in every annotation folder.
+        self.yolo_class_file = yolo_class_file
+        directories_to_create = []
+        if self.default_save_dir:
+            directories_to_create.append(self.default_save_dir)
+        if self.class_file:
+            directories_to_create.append(os.path.dirname(os.path.abspath(self.class_file)))
+        for directory in directories_to_create:
+            try:
+                os.makedirs(directory, exist_ok=True)
+            except OSError as error:
+                print("Could not create directory '{}': {}".format(directory, error))
         self.label_file_format = settings.get(SETTING_LABEL_FILE_FORMAT, LabelFileFormat.PASCAL_VOC)
 
         # For loading all image under a directory
@@ -521,7 +537,7 @@ class MainWindow(QMainWindow, WindowMixin):
 
         # Since loading the file may take some time, make sure it runs in the background.
         if self.file_path and os.path.isdir(self.file_path):
-            self.queue_event(partial(self.import_dir_images, self.file_path or ""))
+            self.queue_event(partial(self.open_dir_dialog, dir_path=self.file_path or "", silent=True))
         elif self.file_path:
             self.queue_event(partial(self.load_file, self.file_path or ""))
 
@@ -534,10 +550,6 @@ class MainWindow(QMainWindow, WindowMixin):
         # Display cursor coordinates at the right of status bar
         self.label_coordinates = QLabel('')
         self.statusBar().addPermanentWidget(self.label_coordinates)
-
-        # Open Dir if default file
-        if self.file_path and os.path.isdir(self.file_path):
-            self.open_dir_dialog(dir_path=self.file_path, silent=True)
 
     def keyReleaseEvent(self, event):
         if event.key() == Qt.Key_Control:
@@ -893,6 +905,8 @@ class MainWindow(QMainWindow, WindowMixin):
         shapes = [format_shape(shape) for shape in self.canvas.shapes]
         # Can add different annotation formats here
         try:
+            annotation_dir = os.path.dirname(os.path.abspath(annotation_file_path))
+            os.makedirs(annotation_dir, exist_ok=True)
             if self.label_file_format == LabelFileFormat.PASCAL_VOC:
                 if annotation_file_path[-4:].lower() != ".xml":
                     annotation_file_path += XML_EXT
@@ -902,7 +916,8 @@ class MainWindow(QMainWindow, WindowMixin):
                 if annotation_file_path[-4:].lower() != ".txt":
                     annotation_file_path += TXT_EXT
                 self.label_file.save_yolo_format(annotation_file_path, shapes, self.file_path, self.image_data, self.label_hist,
-                                                 self.line_color.getRgb(), self.fill_color.getRgb())
+                                                 self.line_color.getRgb(), self.fill_color.getRgb(),
+                                                 class_list_path=self.yolo_class_file)
             elif self.label_file_format == LabelFileFormat.CREATE_ML:
                 if annotation_file_path[-5:].lower() != ".json":
                     annotation_file_path += JSON_EXT
@@ -913,7 +928,7 @@ class MainWindow(QMainWindow, WindowMixin):
                                      self.line_color.getRgb(), self.fill_color.getRgb())
             print('Image:{0} -> Annotation:{1}'.format(self.file_path, annotation_file_path))
             return True
-        except LabelFileError as e:
+        except (LabelFileError, OSError) as e:
             self.error_message(u'Error saving label data', u'<b>%s</b>' % e)
             return False
 
@@ -1386,9 +1401,9 @@ class MainWindow(QMainWindow, WindowMixin):
             return
 
         default_open_dir_path = dir_path if dir_path else '.'
-        if self.last_open_dir and os.path.exists(self.last_open_dir):
+        if not dir_path and self.last_open_dir and os.path.exists(self.last_open_dir):
             default_open_dir_path = self.last_open_dir
-        else:
+        elif not dir_path:
             default_open_dir_path = os.path.dirname(self.file_path) if self.file_path else '.'
         if silent != True:
             target_dir_path = ustr(QFileDialog.getExistingDirectory(self,
@@ -1397,10 +1412,8 @@ class MainWindow(QMainWindow, WindowMixin):
         else:
             target_dir_path = ustr(default_open_dir_path)
         self.last_open_dir = target_dir_path
+        self.default_save_dir = self.default_save_dir or target_dir_path
         self.import_dir_images(target_dir_path)
-        self.default_save_dir = target_dir_path
-        if self.file_path:
-            self.show_bounding_box_from_annotation_file(file_path=self.file_path)
 
     def import_dir_images(self, dir_path):
         if not self.may_continue() or not dir_path:
@@ -1677,7 +1690,7 @@ class MainWindow(QMainWindow, WindowMixin):
             return
 
         self.set_format(FORMAT_YOLO)
-        t_yolo_parse_reader = YoloReader(txt_path, self.image)
+        t_yolo_parse_reader = YoloReader(txt_path, self.image, self.class_file)
         shapes = t_yolo_parse_reader.get_shapes()
         print(shapes)
 
@@ -1758,9 +1771,11 @@ def get_main_app(argv=None):
     args.save_dir = args.save_dir and os.path.normpath(args.save_dir)
 
     # Usage : labelImg.py image classFile saveDir
+    yolo_class_file = args.class_file if len(argv[1:]) >= 2 else None
     win = MainWindow(args.image_dir,
                      args.class_file,
-                     args.save_dir)
+                     args.save_dir,
+                     yolo_class_file)
     win.show()
     return app, win
 

@@ -49,7 +49,7 @@ class YOLOWriter:
 
         return class_index, x_center, y_center, w, h
 
-    def save(self, class_list=None, target_file=None):
+    def save(self, class_list=None, target_file=None, class_list_path=None):
 
         if class_list is None:
             class_list = []
@@ -63,12 +63,16 @@ class YOLOWriter:
         if target_file is None:
             target_file = self.filename + TXT_EXT
 
-        classes_file = os.path.join(os.path.dirname(os.path.abspath(target_file)), "classes.txt")
+        target_dir = os.path.dirname(os.path.abspath(target_file))
+        os.makedirs(target_dir, exist_ok=True)
+        if class_list_path:
+            classes_file = os.path.abspath(class_list_path)
+            os.makedirs(os.path.dirname(classes_file), exist_ok=True)
+        else:
+            classes_file = os.path.join(target_dir, "classes.txt")
 
-        # If the annotation directory already has a classes.txt, it is the
-        # authoritative YOLO class order. Prefer it over the global/default
-        # predefined class list, otherwise saving can overwrite a dataset's
-        # classes.txt with data/predefined_classes.txt (dog/person/cat/...).
+        # Preserve the class order already stored in the configured class file.
+        # Its line numbers define the class indices written into YOLO rows.
         if os.path.isfile(classes_file):
             with codecs.open(classes_file, 'r', encoding=ENCODE_METHOD) as f:
                 existing_class_list = [line.strip() for line in f if line.strip()]
@@ -101,11 +105,14 @@ class YoloReader:
         self.shapes = []
         self.file_path = file_path
 
-        if class_list_path is None:
-            dir_path = os.path.dirname(os.path.realpath(self.file_path))
-            self.class_list_path = os.path.join(dir_path, "classes.txt")
-        else:
+        dir_path = os.path.dirname(os.path.realpath(self.file_path))
+        annotation_classes_path = os.path.join(dir_path, "classes.txt")
+        # An explicitly configured class file is authoritative. Only use a
+        # classes.txt alongside the annotation when no class file was supplied.
+        if class_list_path is not None:
             self.class_list_path = class_list_path
+        else:
+            self.class_list_path = annotation_classes_path
 
         # print (file_path, self.class_list_path)
 

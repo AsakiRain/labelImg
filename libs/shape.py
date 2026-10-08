@@ -161,6 +161,31 @@ class Shape(object):
                 epsilon = dist
         return index
 
+    def nearest_edge(self, point, epsilon):
+        """Return the nearest edge index when point is close to a box edge."""
+        if not self.is_closed() or len(self.points) != 4:
+            return None
+
+        index = None
+        for i, start in enumerate(self.points):
+            end = self.points[(i + 1) % len(self.points)]
+            dx = end.x() - start.x()
+            dy = end.y() - start.y()
+            length_squared = dx * dx + dy * dy
+            if length_squared == 0:
+                continue
+
+            projection = ((point.x() - start.x()) * dx +
+                          (point.y() - start.y()) * dy) / length_squared
+            projection = min(1.0, max(0.0, projection))
+            nearest = QPointF(start.x() + projection * dx,
+                              start.y() + projection * dy)
+            dist = distance(nearest - point)
+            if dist <= epsilon:
+                index = i
+                epsilon = dist
+        return index
+
     def contains_point(self, point):
         return self.make_path().contains(point)
 
